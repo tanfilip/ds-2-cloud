@@ -1,0 +1,11 @@
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/auth/WebSecurityConfig.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/entities/Flight.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/entities/Quote.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/entities/Ticket.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/entities/Seat.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/auth/SecurityFilter.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/Application.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/controller/APIController.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/entities/Booking.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/controller/ViewController.java
+/Users/filiptan/Documents/ds/ds-2-cloud/src/main/java/be/kuleuven/distributedsystems/cloud/entities/User.java
