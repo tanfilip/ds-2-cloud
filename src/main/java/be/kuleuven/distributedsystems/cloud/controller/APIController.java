@@ -9,15 +9,12 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.parameters.P;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.annotation.Resource;
-import java.awt.print.Book;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
@@ -106,12 +103,12 @@ public class APIController {
                 .getContent();
         return allFlightTimes.stream().sorted().toList();
     }
-/*
-"seats" : {
-      "href" : "/flights/986195e5-2b53-42c1-aab4-e621cbc0e522/seats?time={time}&available=true",
-      "templated" : true
-    }
- */
+    /*
+    "seats" : {
+          "href" : "/flights/986195e5-2b53-42c1-aab4-e621cbc0e522/seats?time={time}&available=true",
+          "templated" : true
+        }
+     */
     @GetMapping(value =  "/getAvailableSeats")
     public Map<String, Collection<Seat>> getAvailableSeats(@RequestParam("airline") String airline,
                                                            @RequestParam("flightId") String flightId,
@@ -150,7 +147,7 @@ public class APIController {
 
     }
 
-//    https://reliable-airline.com
+    //    https://reliable-airline.com
 //    /flights/986195e5-2b53-42c1-aab4-e621cbc0e522/seats
 //    ?time=2022-12-06T18:10:00&available=true&key=Iw8zeveVyaPNWonPNaU0213uw3g6Ei
     @GetMapping(value = "/getSeat")
@@ -176,12 +173,11 @@ public class APIController {
 //    /flights/986195e5-2b53-42c1-aab4-e621cbc0e522/seats/b06d1919-0fa0-417a-a006-3a82e6e51bf5/ticket
 //    ?customer=&bookingReference=&key=Iw8zeveVyaPNWonPNaU0213uw3g6Ei
     public void confirmQuotes(@RequestBody List<Quote> quotes) {
-
-        List<Ticket> quoteTickets = new ArrayList<>();
-        UUID bookingId = UUID.randomUUID();
+        List<Ticket> tickets = new ArrayList<>();
         User user = WebSecurityConfig.getUser();
+        String customer = user.getEmail();
         for (Quote currentQuote : quotes) {
-            quoteTickets.add(this.webClientBuilder
+            Ticket ticket = this.webClientBuilder
                     .baseUrl("https://" + currentQuote.getAirline())
                     .build()
                     .put()
@@ -189,18 +185,40 @@ public class APIController {
                             .pathSegment("flights", currentQuote.getFlightId().toString(),
                                     "seats", currentQuote.getSeatId().toString(),
                                     "ticket")
-                            .queryParam("customer",user)
+                            .queryParam("customer",customer)
                             .queryParam("bookingReference", "")
                             .queryParam("key", API_KEY)
                             .build())
                     .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<Ticket>() {
-                    }).block());
+                    .bodyToMono(Ticket.class)
+                    .block();
+            tickets.add(ticket);
         }
-
-        Booking newBooking = new Booking(bookingId, LocalDateTime.now(), quoteTickets, user.getEmail());
+        UUID bookingId = UUID.randomUUID();
+        Booking newBooking = new Booking(bookingId, LocalDateTime.now(), tickets, customer);
         allBookings.add(newBooking);
     }
+
+//    public List<Ticket> getTicketsFromQuotes(List<Quote> allQuotes) {
+//        List<Ticket> allTickets = new ArrayList<>();
+//        for (Quote q : allQuotes) {
+//            Ticket newTicket = this.webClientBuilder
+//                    .baseUrl("https://" + q.getAirline())
+//                    .build()
+//                    .get()
+//                    .uri(uriBuilder -> uriBuilder
+//                            .pathSegment("flights", q.getFlightId().toString(),
+//                                    "seats", q.getSeatId().toString(),
+//                                    "ticket")
+//                            .queryParam("key", API_KEY)
+//                            .build())
+//                    .retrieve()
+//                    .bodyToMono(new ParameterizedTypeReference<Ticket>() {})
+//                    .block();
+//            allTickets.add(newTicket);
+//        }
+//        return allTickets;
+//    }
 
     @GetMapping(value = "/getBookings")
     public List<Booking> getBookings() {
@@ -229,9 +247,17 @@ public class APIController {
         if (!user.isManager()) {
             return null;
         }
+        List<String> bestCustomers = new ArrayList<>();
         Map<String, Integer> customerBookings = mapBookingsPerCustomer();
+        Integer maxvalue = Collections.max(customerBookings.values());
 
-        return new ArrayList<>(customerBookings.keySet());
+        for (String c : customerBookings.keySet()) {
+            Integer value = customerBookings.get(c);
+            if (Objects.equals(value, maxvalue))
+                bestCustomers.add(c);
+        }
+
+        return bestCustomers;
 
     }
 
@@ -247,28 +273,9 @@ public class APIController {
         return customers;
     }
 
-    public List<Ticket> getTicketsFromQuotes(List<Quote> allQuotes) {
-        List<Ticket> allTickets = new ArrayList<>();
-        for (Quote q : allQuotes) {
-            Ticket newTicket = this.webClientBuilder
-                    .baseUrl("https://" + q.getAirline())
-                    .build()
-                    .get()
-                    .uri(uriBuilder -> uriBuilder
-                            .pathSegment("flights", q.getFlightId().toString(),
-                                    "seats", q.getSeatId().toString(),
-                                    "ticket")
-                            .queryParam("key", API_KEY)
-                            .build())
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<Ticket>() {})
-                    .block();
-            allTickets.add(newTicket);
-        }
-        return allTickets;
-    }
-
     public List<Booking> getAllBookingsFromDb() {
         return allBookings;
     }
+
+
 }
