@@ -1,6 +1,12 @@
 package be.kuleuven.distributedsystems.cloud.auth;
 
 import be.kuleuven.distributedsystems.cloud.entities.User;
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.interfaces.DecodedJWT;
+import com.google.gson.Gson;
+import net.minidev.json.JSONObject;
+import net.minidev.json.parser.JSONParser;
+import org.eclipse.jetty.util.ajax.JSON;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -14,9 +20,8 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
+
 
 @Component
 public class SecurityFilter extends OncePerRequestFilter {
@@ -29,12 +34,23 @@ public class SecurityFilter extends OncePerRequestFilter {
         // TODO: (level 1) decode Identity Token and assign correct email and role
         // TODO: (level 2) verify Identity Token
 
-        var user = new User("test@example.com", "");
+        // Get token from request.
+        String authenticationHeader = request.getHeader("Authorization");
+        // Bearer {token}
+        String idToken = authenticationHeader.substring(7);
+        String payload = new String(Base64.getUrlDecoder().decode(JWT.decode(idToken).getPayload()));
+        Gson g = new Gson();
+        JSONObject p = g.fromJson(payload,JSONObject.class);
+
+        String role = "";
+        if (p.get("role") != null)
+            role = p.get("role").toString();
+
+        var user = new User(p.get("email").toString(), role);
         SecurityContext context = SecurityContextHolder.getContext();
         context.setAuthentication(new FirebaseAuthentication(user));
 
         filterChain.doFilter(request, response);
-
     }
 
     @Override
@@ -90,4 +106,3 @@ public class SecurityFilter extends OncePerRequestFilter {
         }
     }
 }
-
