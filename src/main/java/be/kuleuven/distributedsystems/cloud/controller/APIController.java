@@ -8,7 +8,6 @@ import be.kuleuven.distributedsystems.cloud.entities.*;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -19,7 +18,9 @@ import java.util.*;
 @RestController
 @RequestMapping("/api")
 public class APIController {
-    private static  final String DEFAULT_AIRLINE = "reliable-airline.com";
+    private static  final List<String> AIRLINES = new ArrayList<>();
+
+//    private static final String UNRELIABLE_AIRLINE = "unreliable-airline.com";
     private static final String API_KEY = "Iw8zeveVyaPNWonPNaU0213uw3g6Ei";
 
     private List<Booking> allBookings = new ArrayList<>();
@@ -27,198 +28,218 @@ public class APIController {
     @Resource(name="webClientBuilder")
     private WebClient.Builder webClientBuilder;
 
+
+    public APIController() {
+        AIRLINES.add("reliable-airline.com");
+        AIRLINES.add("unreliable-airline.com");
+    }
     @GetMapping("/getFlights")
     public Collection<Flight> getFlights() {
-        return Objects.requireNonNull(this.webClientBuilder
-                        .baseUrl("https://" + DEFAULT_AIRLINE)
-                        .build()
-                        .get()
-                        .uri(uriBuilder -> uriBuilder
-                                .pathSegment("flights")
-                                .queryParam("key", API_KEY)
-                                .build())
-                        .retrieve()
-                        .bodyToMono(new ParameterizedTypeReference<CollectionModel<Flight>>() {
-                        })
-                        .block())
-                .getContent();
+        List<Flight> allFlights = new ArrayList<>();
+//        boolean flightsNotFound;
+        for (String currentAirline : AIRLINES) {
+//            boolean flightsNotFound = true;
+            while (true) {
+                try {
+                    Collection<Flight> currentFlights = Objects.requireNonNull(this.webClientBuilder
+                                    .baseUrl("https://" + currentAirline)
+                                    .build()
+                                    .get()
+                                    .uri(uriBuilder -> uriBuilder
+                                            .pathSegment("flights")
+                                            .queryParam("key", API_KEY)
+                                            .build())
+                                    .retrieve()
+                                    .bodyToMono(new ParameterizedTypeReference<CollectionModel<Flight>>() {
+                                    })
+                                    .block())
+                            .getContent();
+                    allFlights.addAll(currentFlights);
+                    break;
+//                    flightsNotFound = false;
+                } catch (Exception e) {
+                    System.out.println("getFlights1: " + currentAirline + " failed to find flights, try again...");
+                }
+            }
+
+
+        }
+        return allFlights;
     }
     @GetMapping(value = "/getFlight")
-    public ResponseEntity<Flight> getFlightById(@RequestParam("airline") String airline,
+    public Flight getFlightById(@RequestParam("airline") String airline,
                                                 @RequestParam("flightId") String flightId) {
-        Flight requestedFlight = this.webClientBuilder
-                .baseUrl("https://" + airline)
-                .build()
-                .get()
-                .uri(uriBuilder -> uriBuilder
-                        .pathSegment("flights", flightId)
-                        .queryParam("key", API_KEY)
-                        .build())
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Flight>() {})
-                .block();
-        if (requestedFlight != null) {
-            return new ResponseEntity<>(requestedFlight, HttpStatus.OK);
-        } else {
-            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
-        }
-    }
-//    public Flight getFlight(@RequestParam(name = "airline") String airline,
-//                            @RequestParam(name = "flightId") String flightId) {
-//        WebClient.ResponseSpec response = this.webClientBuilder
-//                .baseUrl("https://" + airline)
-//                .build()
-//                .get()
-//                .uri(uriBuilder -> uriBuilder
-//                        .pathSegment("flights", flightId)
-//                        .queryParam("key", API_KEY)
-//                        .build())
-//                .retrieve();
-//        Flight desiredFlight = response
-//                .bodyToMono(new ParameterizedTypeReference<Flight>() {
-//                })
-//                .block();
-//        if (desiredFlight != null) {
-//            return desiredFlight;
-//        } else {
-//            throw new RuntimeException();
-//        }
-//    }
+//        boolean flightNotFound = true;
+//        Flight requestedFlight = null;
 
-    @GetMapping(value = "/getFlightTimes")
-    public Collection<LocalDateTime> getFlightTimes(@RequestParam("airline") String airline,
-                                                    @RequestParam("flightId") String flightId) {
-        Collection<LocalDateTime> allFlightTimes = Objects.requireNonNull(this.webClientBuilder
+        while (true) {
+            try {
+                return this.webClientBuilder
                         .baseUrl("https://" + airline)
                         .build()
                         .get()
                         .uri(uriBuilder -> uriBuilder
-                                .pathSegment("flights", flightId, "times")
+                                .pathSegment("flights", flightId)
                                 .queryParam("key", API_KEY)
                                 .build())
                         .retrieve()
-                        .bodyToMono(new ParameterizedTypeReference<CollectionModel<LocalDateTime>>() {
-                        })
-                        .block())
-                .getContent();
-        return allFlightTimes.stream().sorted().toList();
-    }
-    /*
-    "seats" : {
-          "href" : "/flights/986195e5-2b53-42c1-aab4-e621cbc0e522/seats?time={time}&available=true",
-          "templated" : true
+                        .bodyToMono(Flight.class)
+                        .block();
+            } catch (Exception e) {
+                System.out.println("\r\nGetFlight2: " + airline + " failed to find flight"+ flightId +"\r\n");
+            }
         }
-     */
+    }
+
+    @GetMapping(value = "/getFlightTimes")
+    public Collection<LocalDateTime> getFlightTimes(@RequestParam("airline") String airline,
+                                                    @RequestParam("flightId") String flightId) {
+        while (true) {
+            try {
+                Collection<LocalDateTime> allFlightTimes = Objects.requireNonNull(this.webClientBuilder
+                                .baseUrl("https://" + airline)
+                                .build()
+                                .get()
+                                .uri(uriBuilder -> uriBuilder
+                                        .pathSegment("flights", flightId, "times")
+                                        .queryParam("key", API_KEY)
+                                        .build())
+                                .retrieve()
+                                .bodyToMono(new ParameterizedTypeReference<CollectionModel<LocalDateTime>>() {
+                                })
+                                .block())
+                        .getContent();
+                return allFlightTimes.stream().sorted().toList();
+            } catch (Exception e) {
+                System.out.println("getFlightTimes3: " + airline + " couldn't find time");
+            }
+        }
+
+    }
+
     @GetMapping(value =  "/getAvailableSeats")
     public Map<String, Collection<Seat>> getAvailableSeats(@RequestParam("airline") String airline,
                                                            @RequestParam("flightId") String flightId,
                                                            @RequestParam("time") String time) {
-        Collection<Seat> allAvailableSeats = this.webClientBuilder
-                .baseUrl("https://" + airline)
-                .build()
-                .get()
-                .uri(uriBuilder -> uriBuilder
-                        .pathSegment("flights", flightId, "seats")
-                        .queryParam("time", time)
-                        .queryParam("available", "true")
-                        .queryParam("key", API_KEY)
-                        .build())
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<CollectionModel<Seat>>() {})
-                .block()
-                .getContent();
-        if (allAvailableSeats.size() != 0) {
-            Map<String, Collection<Seat>> seatsMappedByType = new HashMap<String, Collection<Seat>>();
-            for (Seat currentSeat : allAvailableSeats) {
-                if (!seatsMappedByType.containsKey(currentSeat.getType())) {
-                    seatsMappedByType.put(currentSeat.getType(), new ArrayList<Seat>());
-                }
-                seatsMappedByType.get(currentSeat.getType()).add(currentSeat);
-            }
-            for (String currentType : seatsMappedByType.keySet()) {
-                Collection<Seat> sortedType = seatsMappedByType.get(currentType)
-                        .stream().sorted((s1, s2) -> s1.getName().compareTo(s2.getName())).toList();
-                seatsMappedByType.put(currentType, sortedType);
-            }
-            return seatsMappedByType;
-        } else {
-            throw new RuntimeException();
-        }
+        while (true) {
+            try {
+                Collection<Seat> allAvailableSeats = this.webClientBuilder
+                        .baseUrl("https://" + airline)
+                        .build()
+                        .get()
+                        .uri(uriBuilder -> uriBuilder
+                                .pathSegment("flights", flightId, "seats")
+                                .queryParam("time", time)
+                                .queryParam("available", "true")
+                                .queryParam("key", API_KEY)
+                                .build())
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<CollectionModel<Seat>>() {})
+                        .block()
+                        .getContent();
+                Map<String, Collection<Seat>> seatsMappedByType = mapSeatsByType(allAvailableSeats);
 
+                for (String currentType : seatsMappedByType.keySet()) {
+                    Collection<Seat> sortedType = seatsMappedByType.get(currentType)
+                            .stream().sorted((seat1, seat2) -> compareSeats(seat1.getName(), seat2.getName())).toList();
+                    seatsMappedByType.put(currentType, sortedType);
+                }
+
+                return seatsMappedByType;
+            } catch (Exception e) {
+                System.out.println("getAvailableSeats4: " + airline + "Error");
+            }
+        }
     }
 
-    //    https://reliable-airline.com
-//    /flights/986195e5-2b53-42c1-aab4-e621cbc0e522/seats
-//    ?time=2022-12-06T18:10:00&available=true&key=Iw8zeveVyaPNWonPNaU0213uw3g6Ei
+    private Map<String, Collection<Seat>> mapSeatsByType(Collection<Seat> allAvailableSeats) {
+        Map<String, Collection<Seat>> seatsMappedByType = new HashMap<String, Collection<Seat>>();
+        for (Seat currentSeat : allAvailableSeats) {
+            if (!seatsMappedByType.containsKey(currentSeat.getType())) {
+                seatsMappedByType.put(currentSeat.getType(), new ArrayList<Seat>());
+            }
+            seatsMappedByType.get(currentSeat.getType()).add(currentSeat);
+        }
+        return seatsMappedByType;
+    }
+
+    private int compareSeats(String seat1, String seat2) {
+        if (seat1.length() > seat2.length()) {
+            return 1;
+        } else if (seat1.length() < seat2.length()) {
+            return -1;
+        } else {
+            return seat1.compareTo(seat2);
+        }
+    }
+
     @GetMapping(value = "/getSeat")
     public Seat getSeat(@RequestParam("airline") String airline,
                         @RequestParam("flightId") String flightId,
                         @RequestParam("seatId") String seatId) {
-        return this.webClientBuilder
-                .baseUrl("https://" + airline)
-                .build()
-                .get()
-                .uri(uriBuilder -> uriBuilder
-                        .pathSegment("flights", flightId, "seats", seatId)
-                        .queryParam("key", API_KEY)
-                        .build())
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Seat>() {})
-                .block();
+        while (true) {
+            try {
+                return this.webClientBuilder
+                        .baseUrl("https://" + airline)
+                        .build()
+                        .get()
+                        .uri(uriBuilder -> uriBuilder
+                                .pathSegment("flights", flightId, "seats", seatId)
+                                .queryParam("key", API_KEY)
+                                .build())
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<Seat>() {})
+                        .block();
+            } catch (Exception e) {
+                System.out.println("getSeat5: Pause");
+            }
+        }
     }
 
     @PostMapping(value = "/confirmQuotes")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    // https://reliable-airlines.com
-//    /flights/986195e5-2b53-42c1-aab4-e621cbc0e522/seats/b06d1919-0fa0-417a-a006-3a82e6e51bf5/ticket
-//    ?customer=&bookingReference=&key=Iw8zeveVyaPNWonPNaU0213uw3g6Ei
+
     public void confirmQuotes(@RequestBody List<Quote> quotes) {
         List<Ticket> tickets = new ArrayList<>();
         User user = WebSecurityConfig.getUser();
         String customer = user.getEmail();
         for (Quote currentQuote : quotes) {
-            Ticket ticket = this.webClientBuilder
-                    .baseUrl("https://" + currentQuote.getAirline())
-                    .build()
-                    .put()
-                    .uri(uriBuilder -> uriBuilder
-                            .pathSegment("flights", currentQuote.getFlightId().toString(),
-                                    "seats", currentQuote.getSeatId().toString(),
-                                    "ticket")
-                            .queryParam("customer",customer)
-                            .queryParam("bookingReference", "")
-                            .queryParam("key", API_KEY)
-                            .build())
-                    .retrieve()
-                    .bodyToMono(Ticket.class)
-                    .block();
-            tickets.add(ticket);
+            while (true) {
+                try {
+                    Ticket ticket = createTicket(currentQuote, customer);
+                    tickets.add(ticket);
+                    break;
+                } catch (Exception e) {
+                    System.out.println("confirmQuotes6: Pause");
+                }
+            }
         }
         UUID bookingId = UUID.randomUUID();
         Booking newBooking = new Booking(bookingId, LocalDateTime.now(), tickets, customer);
+        addBooking(newBooking);
+    }
+
+    private void addBooking(Booking newBooking) {
         allBookings.add(newBooking);
     }
 
-//    public List<Ticket> getTicketsFromQuotes(List<Quote> allQuotes) {
-//        List<Ticket> allTickets = new ArrayList<>();
-//        for (Quote q : allQuotes) {
-//            Ticket newTicket = this.webClientBuilder
-//                    .baseUrl("https://" + q.getAirline())
-//                    .build()
-//                    .get()
-//                    .uri(uriBuilder -> uriBuilder
-//                            .pathSegment("flights", q.getFlightId().toString(),
-//                                    "seats", q.getSeatId().toString(),
-//                                    "ticket")
-//                            .queryParam("key", API_KEY)
-//                            .build())
-//                    .retrieve()
-//                    .bodyToMono(new ParameterizedTypeReference<Ticket>() {})
-//                    .block();
-//            allTickets.add(newTicket);
-//        }
-//        return allTickets;
-//    }
+    private Ticket createTicket(Quote currentQuote, String customer) {
+        return this.webClientBuilder
+                .baseUrl("https://" + currentQuote.getAirline())
+                .build()
+                .put()
+                .uri(uriBuilder -> uriBuilder
+                        .pathSegment("flights", currentQuote.getFlightId().toString(),
+                                "seats", currentQuote.getSeatId().toString(),
+                                "ticket")
+                        .queryParam("customer", customer)
+                        .queryParam("bookingReference", "")
+                        .queryParam("key", API_KEY)
+                        .build())
+                .retrieve()
+                .bodyToMono(Ticket.class)
+                .block();
+    }
 
     @GetMapping(value = "/getBookings")
     public List<Booking> getBookings() {
