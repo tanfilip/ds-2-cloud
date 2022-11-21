@@ -12,9 +12,6 @@ public class Ticket {
     private String customer;
     private String bookingReference;
 
-    public Ticket() {
-    }
-
     public Ticket(String airline, UUID flightId, UUID seatId, UUID ticketId, String customer, String bookingReference) {
         this.airline = airline;
         this.flightId = flightId;
