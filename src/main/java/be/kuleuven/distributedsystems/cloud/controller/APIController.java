@@ -54,6 +54,9 @@ public class APIController {
     @Resource(name="webClientBuilder")
     private WebClient.Builder webClientBuilder;
 
+    @Resource(name="publisher")
+    private Publisher publisher;
+
     @Resource(name = "pubSubTransportChannelProvider")
     private TransportChannelProvider channelProvider;
 
@@ -61,7 +64,7 @@ public class APIController {
     private CredentialsProvider credentialsProvider;
 
 
-    public APIController() {
+    public APIController() throws IOException {
         AIRLINES.add("reliable-airline.com");
         AIRLINES.add("unreliable-airline.com");
     }
@@ -216,21 +219,21 @@ public class APIController {
 
     @PostMapping(value = "/confirmQuotes")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void confirmQuotes(@RequestBody List<Quote> quotesToConfirm) {
+    public void confirmQuotes(@RequestBody List<Quote> quotesToConfirm) throws ExecutionException, InterruptedException {
 
         // Publishing a message:
         System.out.println("begin of confirmQuote");
-        Publisher publisher = null;
-        try {
-            TopicName topicName = TopicName.of(projectId, topicId);
-            publisher = Publisher.newBuilder(topicName)
-                    .setChannelProvider(channelProvider)
-                    .setCredentialsProvider(credentialsProvider)
-                    .build();
-            System.out.println("Topic worked.");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+//        Publisher publisher = null;
+//        try {
+//            TopicName topicName = TopicName.of(projectId, topicId);
+//            publisher = Publisher.newBuilder(topicName)
+//                    .setChannelProvider(channelProvider)
+//                    .setCredentialsProvider(credentialsProvider)
+//                    .build();
+//            System.out.println("Topic worked.");
+//        } catch (IOException e) {
+//            throw new RuntimeException(e);
+//        }
 
         // Get customer's name and email.
         User user = WebSecurityConfig.getUser();
@@ -242,9 +245,11 @@ public class APIController {
                 .putAttributes("customer", customer)
                 .build();
 
-        // Once published, returns a server-assigned message id (unique within the topic)
+        // Once published, returns a server-assigned message id
         if (publisher != null) {
+            System.out.println("publishing");
             ApiFuture<String> future = publisher.publish(pubSubMsg);
+            future.get();
         }
 
 

@@ -46,7 +46,7 @@ public class Application {
         System.setProperty("server.port", System.getenv().getOrDefault("PORT", "8080"));
 
         ApplicationContext context = SpringApplication.run(Application.class, args);
-        createTopic();
+//        createTopic();
 
         // TODO: (level 2) load this data into Firestore
         String data = new String(new ClassPathResource("data.json").getInputStream().readAllBytes());
@@ -76,24 +76,25 @@ public class Application {
     }
 
     private static void createTopic() throws IOException {
-        try(TopicAdminClient topicAdminClient =
-                    TopicAdminClient.create(
+        TopicAdminClient topicAdminClient =
+                TopicAdminClient.create(
                         TopicAdminSettings.newBuilder()
-                            .setTransportChannelProvider(pubSubTransportChannelProvider())
-                            .setCredentialsProvider(pubSubCredentialsProvider())
-                            .build());
-        ) {
-            TopicName topicName = TopicName.of(projectId(), topicId());
+                                .setTransportChannelProvider(pubSubTransportChannelProvider())
+                                .setCredentialsProvider(pubSubCredentialsProvider())
+                                .build());
+        TopicName topicName = TopicName.of(projectId(), topicId());
+        try {
             Topic topic = topicAdminClient.createTopic(topicName);
             System.out.println("Created topic: "+ topic.getName());
         } catch (Exception e) {
-            System.out.println("did not create topic");
+            Topic topic = topicAdminClient.getTopic(topicName);
+            System.out.println("Topic already created: " + topic.getName());
         }
-        initSub();
+//        initSub();
     }
     private static void initSub() throws IOException {
         PushConfig pushConfig = PushConfig.newBuilder()
-                .setPushEndpoint("http://localhost:8080/pubsub/subs")
+                .setPushEndpoint("http://localhost:8080/subs")
                 .build();
         SubscriptionAdminClient subscriptionAdminClient = SubscriptionAdminClient.create(
                 SubscriptionAdminSettings.newBuilder()
@@ -102,7 +103,7 @@ public class Application {
                         .build());
         try {
             subscriptionAdminClient.createSubscription(
-                    SubscriptionName.of(projectId(), "subs"),
+                    SubscriptionName.of(projectId(), topicId()),
                     TopicName.of(projectId(), topicId()),
                     pushConfig, 60);
         } catch (Exception e) {
@@ -112,16 +113,19 @@ public class Application {
 
     @Bean
     public Publisher publisher() throws IOException {
-        TransportChannelProvider channelProvider = FixedTransportChannelProvider.create(
-                GrpcTransportChannel.create(
-                        ManagedChannelBuilder.forTarget("localhost:8083").usePlaintext().build()
-                )
-        );
-        CredentialsProvider credentialsProvider = NoCredentialsProvider.create();
+        TopicName topicName = TopicName.of(projectId(), topicId());
+        createTopic();
+        initSub();
+//        TransportChannelProvider channelProvider = FixedTransportChannelProvider.create(
+//                GrpcTransportChannel.create(
+//                        ManagedChannelBuilder.forTarget("localhost:8083").usePlaintext().build()
+//                )
+//        );
+//        CredentialsProvider credentialsProvider = NoCredentialsProvider.create();
         return Publisher
-                .newBuilder(topicId())
-                .setChannelProvider(channelProvider)
-                .setCredentialsProvider(credentialsProvider)
+                .newBuilder(topicName)
+                .setChannelProvider(pubSubTransportChannelProvider())
+                .setCredentialsProvider(pubSubCredentialsProvider())
                 .build();
     }
 

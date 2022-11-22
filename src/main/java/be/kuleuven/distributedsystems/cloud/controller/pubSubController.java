@@ -25,10 +25,9 @@ import javax.annotation.Resource;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 
 @RestController
-@Component
-@RequestMapping("/pubsub")
 public class pubSubController {
     private static final String API_KEY = "Iw8zeveVyaPNWonPNaU0213uw3g6Ei";
 
@@ -61,15 +60,18 @@ public class pubSubController {
         List<Quote> quotesToConfirm = gson.fromJson((String) JSON.parse(String.valueOf(quotesAsJson)), listQuoteType);
         String customer = gson.fromJson((String) JSON.parse(String.valueOf(customerAsJson)), String.class);
         String bookingReference = UUID.randomUUID().toString();
-        List<Ticket> ticketsFromQuotes = changeQuotesToTickets(quotesToConfirm, customer, bookingReference);
 
-        addBookingToDatabase(ticketsFromQuotes, customer);
+        List<Ticket> ticketsFromQuotes = changeQuotesToTickets(quotesToConfirm, customer, bookingReference);
+        for (Ticket t : ticketsFromQuotes)
+            System.out.println(t.getTicketId());
+//        addBookingToDatabase(ticketsFromQuotes, customer);
+
 
         return ResponseEntity.status(HttpStatus.OK).body("OK");
 
     }
 
-    private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer) {
+    private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer) throws ExecutionException, InterruptedException {
         LocalDateTime currentBookingTime = LocalDateTime.now();
 
         CollectionReference bookings = db.collection("bookings");
@@ -85,6 +87,7 @@ public class pubSubController {
         addTicketsToDb(newBooking);
         String bookingId = newBooking.getId().toString();
         ApiFuture<WriteResult> future = bookings.document(bookingId).set(bookingData);
+        future.get();
     }
 
     private void addTicketsToDb(Booking newBooking) {
@@ -106,7 +109,7 @@ public class pubSubController {
     private List<Ticket> changeQuotesToTickets(List<Quote> quotesToConfirm, String customer, String bookingReference) {
         List<Ticket> ticketsFromQuotes = new ArrayList<>();
         System.out.println("got to changeQuotesToTickets");
-        String bookingRef = UUID.randomUUID().toString();
+        System.out.println(quotesToConfirm.size());
         for (Quote q : quotesToConfirm) {
             Ticket ticket = this.webClientBuilder
                     .baseUrl("https://" + q.getAirline())
@@ -117,14 +120,14 @@ public class pubSubController {
                                     "seats", q.getSeatId().toString(),
                                     "ticket")
                             .queryParam("customer", customer)
-                            .queryParam("bookingReference", bookingRef)
+                            .queryParam("bookingReference", "")
                             .queryParam("key", API_KEY)
                             .build())
                     .retrieve()
-                    .onStatus(HttpStatus.CONFLICT::equals,
-                            response -> Mono.error(new seatAlreadyBookedException(q)))
+//                    .onStatus(HttpStatus.CONFLICT::equals,
+//                            response -> Mono.error(new seatAlreadyBookedException(q)))
                     .bodyToMono(Ticket.class)
-                    .retryWhen(Retry.max(3))
+//                    .retryWhen(Retry.max(3))
                     .block();
             ticketsFromQuotes.add(ticket);
         }
