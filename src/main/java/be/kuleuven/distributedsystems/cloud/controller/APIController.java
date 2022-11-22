@@ -21,6 +21,7 @@ import org.springframework.hateoas.CollectionModel;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.util.retry.Retry;
 
 import javax.annotation.Resource;
 import javax.swing.text.Document;
@@ -70,28 +71,22 @@ public class APIController {
 //        boolean flightsNotFound;
         for (String currentAirline : AIRLINES) {
 //            boolean flightsNotFound = true;
-            while (true) {
-                try {
-                    Collection<Flight> currentFlights = Objects.requireNonNull(this.webClientBuilder
-                                    .baseUrl("https://" + currentAirline)
-                                    .build()
-                                    .get()
-                                    .uri(uriBuilder -> uriBuilder
-                                            .pathSegment("flights")
-                                            .queryParam("key", API_KEY)
-                                            .build())
-                                    .retrieve()
-                                    .bodyToMono(new ParameterizedTypeReference<CollectionModel<Flight>>() {
-                                    })
-                                    .block())
-                            .getContent();
-                    allFlights.addAll(currentFlights);
-                    break;
-//                    flightsNotFound = false;
-                } catch (Exception e) {
-                    System.out.println("getFlights1: " + currentAirline + " failed to find flights, try again...");
-                }
-            }
+            Collection<Flight> currentFlights = this.webClientBuilder
+                    .baseUrl("https://" + currentAirline)
+                    .build()
+                    .get()
+                    .uri(uriBuilder -> uriBuilder
+                            .pathSegment("flights")
+                            .queryParam("key", API_KEY)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<CollectionModel<Flight>>() {
+                    })
+                    .retryWhen(Retry.max(3))
+                    .block()
+                    .getContent();
+            allFlights.addAll(currentFlights);
+
 
 
         }
@@ -100,48 +95,38 @@ public class APIController {
     @GetMapping(value = "/getFlight")
     public Flight getFlightById(@RequestParam("airline") String airline,
                                                 @RequestParam("flightId") String flightId) {
-        while (true) {
-            try {
-                return this.webClientBuilder
-                        .baseUrl("https://" + airline)
-                        .build()
-                        .get()
-                        .uri(uriBuilder -> uriBuilder
-                                .pathSegment("flights", flightId)
-                                .queryParam("key", API_KEY)
-                                .build())
-                        .retrieve()
-                        .bodyToMono(Flight.class)
-                        .block();
-            } catch (Exception e) {
-                System.out.println("\r\nGetFlight2: " + airline + " failed to find flight"+ flightId +"\r\n");
-            }
-        }
+        return this.webClientBuilder
+                .baseUrl("https://" + airline)
+                .build()
+                .get()
+                .uri(uriBuilder -> uriBuilder
+                        .pathSegment("flights", flightId)
+                        .queryParam("key", API_KEY)
+                        .build())
+                .retrieve()
+                .bodyToMono(Flight.class)
+                .retryWhen(Retry.max(3))
+                .block();
     }
 
     @GetMapping(value = "/getFlightTimes")
     public Collection<LocalDateTime> getFlightTimes(@RequestParam("airline") String airline,
                                                     @RequestParam("flightId") String flightId) {
-        while (true) {
-            try {
-                Collection<LocalDateTime> allFlightTimes = Objects.requireNonNull(this.webClientBuilder
-                                .baseUrl("https://" + airline)
-                                .build()
-                                .get()
-                                .uri(uriBuilder -> uriBuilder
-                                        .pathSegment("flights", flightId, "times")
-                                        .queryParam("key", API_KEY)
-                                        .build())
-                                .retrieve()
-                                .bodyToMono(new ParameterizedTypeReference<CollectionModel<LocalDateTime>>() {
-                                })
-                                .block())
-                        .getContent();
-                return allFlightTimes.stream().sorted().toList();
-            } catch (Exception e) {
-                System.out.println("getFlightTimes3: " + airline + " couldn't find time");
-            }
-        }
+        Collection<LocalDateTime> allFlightTimes = Objects.requireNonNull(this.webClientBuilder
+                        .baseUrl("https://" + airline)
+                        .build()
+                        .get()
+                        .uri(uriBuilder -> uriBuilder
+                                .pathSegment("flights", flightId, "times")
+                                .queryParam("key", API_KEY)
+                                .build())
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<CollectionModel<LocalDateTime>>() {
+                        })
+                        .retryWhen(Retry.max(3))
+                        .block())
+                .getContent();
+        return allFlightTimes.stream().sorted().toList();
 
     }
 
@@ -149,36 +134,32 @@ public class APIController {
     public Map<String, Collection<Seat>> getAvailableSeats(@RequestParam("airline") String airline,
                                                            @RequestParam("flightId") String flightId,
                                                            @RequestParam("time") String time) {
-        while (true) {
-            try {
-                Collection<Seat> allAvailableSeats = Objects.requireNonNull(this.webClientBuilder
-                                .baseUrl("https://" + airline)
-                                .build()
-                                .get()
-                                .uri(uriBuilder -> uriBuilder
-                                        .pathSegment("flights", flightId, "seats")
-                                        .queryParam("time", time)
-                                        .queryParam("available", "true")
-                                        .queryParam("key", API_KEY)
-                                        .build())
-                                .retrieve()
-                                .bodyToMono(new ParameterizedTypeReference<CollectionModel<Seat>>() {
-                                })
-                                .block())
-                        .getContent();
-                Map<String, Collection<Seat>> seatsMappedByType = mapSeatsByType(allAvailableSeats);
+        Collection<Seat> allAvailableSeats = Objects.requireNonNull(this.webClientBuilder
+                        .baseUrl("https://" + airline)
+                        .build()
+                        .get()
+                        .uri(uriBuilder -> uriBuilder
+                                .pathSegment("flights", flightId, "seats")
+                                .queryParam("time", time)
+                                .queryParam("available", "true")
+                                .queryParam("key", API_KEY)
+                                .build())
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<CollectionModel<Seat>>() {
+                        })
+                        .retryWhen(Retry.max(3))
+                        .block())
+                .getContent();
+        Map<String, Collection<Seat>> seatsMappedByType = mapSeatsByType(allAvailableSeats);
 
-                for (String currentType : seatsMappedByType.keySet()) {
-                    Collection<Seat> sortedType = seatsMappedByType.get(currentType)
-                            .stream().sorted((seat1, seat2) -> compareSeats(seat1.getName(), seat2.getName())).toList();
-                    seatsMappedByType.put(currentType, sortedType);
-                }
-
-                return seatsMappedByType;
-            } catch (Exception e) {
-                System.out.println("getAvailableSeats4: " + airline + "Error");
-            }
+        for (String currentType : seatsMappedByType.keySet()) {
+            Collection<Seat> sortedType = seatsMappedByType.get(currentType)
+                    .stream().sorted((seat1, seat2) -> compareSeats(seat1.getName(), seat2.getName())).toList();
+            seatsMappedByType.put(currentType, sortedType);
         }
+
+        return seatsMappedByType;
+
     }
 
     private Map<String, Collection<Seat>> mapSeatsByType(Collection<Seat> allAvailableSeats) {

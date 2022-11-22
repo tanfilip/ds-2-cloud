@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import javax.annotation.Resource;
 import java.lang.reflect.Type;
@@ -107,43 +108,25 @@ public class pubSubController {
         System.out.println("got to changeQuotesToTickets");
         String bookingRef = UUID.randomUUID().toString();
         for (Quote q : quotesToConfirm) {
-//            System.out.println("currentQuote airline: " + q.getAirline());
-//            System.out.println("flightId: " + q.getFlightId());
-//            System.out.println("currentQuote seatId: " + q.getSeatId());
-//            System.out.println("customer=" + customer);
-//            System.out.println("bookingReference=" + bookingReference);
-//            System.out.println("key=" + API_KEY);
-            while (true) {
-                try {
-                    Ticket ticket = this.webClientBuilder
-                            .baseUrl("https://" + q.getAirline())
-                            .build()
-                            .put()
-                            .uri(uriBuilder -> uriBuilder
-                                    .pathSegment("flights", q.getFlightId().toString(),
-                                            "seats", q.getSeatId().toString(),
-                                            "ticket")
-                                    .queryParam("customer", customer)
-                                    .queryParam("bookingReference", bookingRef)
-                                    .queryParam("key", API_KEY)
-                                    .build())
-                            .retrieve()
-                            .onStatus(HttpStatus.CONFLICT::equals,
-                                    response -> Mono.error(new seatAlreadyBookedException(q)))
-                            .bodyToMono(Ticket.class)
-                            .block();
-                    ticketsFromQuotes.add(ticket);
-                    break;
-                } catch (Exception e) {
-                    if (e.getClass().equals(seatAlreadyBookedException.class)) {
-                        System.out.println("testing...");
-                        deleteBookedTicket(ticketsFromQuotes, q);
-                    }
-                    System.out.println("Exception:" + e.getClass().equals(seatAlreadyBookedException.class));
-                    System.out.println("createTicket failed");
-                }
-            }
-
+            Ticket ticket = this.webClientBuilder
+                    .baseUrl("https://" + q.getAirline())
+                    .build()
+                    .put()
+                    .uri(uriBuilder -> uriBuilder
+                            .pathSegment("flights", q.getFlightId().toString(),
+                                    "seats", q.getSeatId().toString(),
+                                    "ticket")
+                            .queryParam("customer", customer)
+                            .queryParam("bookingReference", bookingRef)
+                            .queryParam("key", API_KEY)
+                            .build())
+                    .retrieve()
+                    .onStatus(HttpStatus.CONFLICT::equals,
+                            response -> Mono.error(new seatAlreadyBookedException(q)))
+                    .bodyToMono(Ticket.class)
+                    .retryWhen(Retry.max(3))
+                    .block();
+            ticketsFromQuotes.add(ticket);
         }
         return ticketsFromQuotes;
 
@@ -178,7 +161,8 @@ public class pubSubController {
                                 .queryParam("key", API_KEY)
                                 .build())
                         .retrieve()
-                        .bodyToMono(void.class);
+                        .bodyToMono(void.class)
+                        .retryWhen(Retry.max(3));
                 break;
             } catch (Exception e) {
                 System.out.println("Ticket not found...");

@@ -41,7 +41,7 @@ public class Application {
     private static final String TOPIC = "confirmQuotes";
     private static final String PROJECT_ID = "demo-distributed-systems-kul";
     static String hostPortFireStore = "localhost:8084";
-    private static boolean subCreated = true;
+//    private static boolean subCreated = true;
     private static final ManagedChannel pubSubChannel = ManagedChannelBuilder.forTarget(hostPortPubSub).usePlaintext().build();
 
     @SuppressWarnings("unchecked")
@@ -111,7 +111,6 @@ public class Application {
         } catch (Exception e) {
             System.out.println("Sub is already created.");
         }
-
     }
 
 
@@ -141,7 +140,6 @@ public class Application {
     }
 
     private static TransportChannelProvider fireStoreTransportChannelProvider() {
-
         return InstantiatingGrpcChannelProvider.newBuilder()
                 .setEndpoint(hostPortFireStore)
                 .setChannelConfigurator((ManagedChannelBuilder::usePlaintext))
