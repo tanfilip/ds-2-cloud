@@ -8,10 +8,7 @@ import com.google.api.gax.rpc.FixedTransportChannelProvider;
 import com.google.api.gax.rpc.TransportChannelProvider;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.FirestoreOptions;
-import com.google.cloud.pubsub.v1.SubscriptionAdminClient;
-import com.google.cloud.pubsub.v1.SubscriptionAdminSettings;
-import com.google.cloud.pubsub.v1.TopicAdminClient;
-import com.google.cloud.pubsub.v1.TopicAdminSettings;
+import com.google.cloud.pubsub.v1.*;
 import com.google.pubsub.v1.PushConfig;
 import com.google.pubsub.v1.SubscriptionName;
 import com.google.pubsub.v1.Topic;
@@ -111,6 +108,21 @@ public class Application {
         } catch (Exception e) {
             System.out.println("Sub is already created.");
         }
+    }
+
+    @Bean
+    public Publisher publisher() throws IOException {
+        TransportChannelProvider channelProvider = FixedTransportChannelProvider.create(
+                GrpcTransportChannel.create(
+                        ManagedChannelBuilder.forTarget("localhost:8083").usePlaintext().build()
+                )
+        );
+        CredentialsProvider credentialsProvider = NoCredentialsProvider.create();
+        return Publisher
+                .newBuilder(topicId())
+                .setChannelProvider(channelProvider)
+                .setCredentialsProvider(credentialsProvider)
+                .build();
     }
 
 
