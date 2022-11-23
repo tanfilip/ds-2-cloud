@@ -6,16 +6,13 @@ firebase emulators:start --project demo-distributed-systems-kul
 import be.kuleuven.distributedsystems.cloud.auth.WebSecurityConfig;
 import be.kuleuven.distributedsystems.cloud.entities.*;
 import com.google.api.core.ApiFuture;
-import com.google.api.core.ApiFutureCallback;
-import com.google.api.core.ApiFutures;
+
 import com.google.api.gax.core.CredentialsProvider;
-import com.google.api.gax.rpc.ApiException;
 import com.google.api.gax.rpc.TransportChannelProvider;
 import com.google.cloud.firestore.*;
 import com.google.cloud.pubsub.v1.Publisher;
 import com.google.gson.Gson;
 import com.google.pubsub.v1.PubsubMessage;
-import com.google.pubsub.v1.TopicName;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.http.HttpStatus;
@@ -24,8 +21,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.util.retry.Retry;
 
 import javax.annotation.Resource;
-import javax.swing.text.Document;
-import java.awt.print.Book;
+
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -36,10 +32,8 @@ import java.util.concurrent.ExecutionException;
 public class APIController {
     private static  final List<String> AIRLINES = new ArrayList<>();
 
-//    private static final String UNRELIABLE_AIRLINE = "unreliable-airline.com";
     private static final String API_KEY = "Iw8zeveVyaPNWonPNaU0213uw3g6Ei";
 
-//    private List<Booking> allBookings = new ArrayList<>();
 
     private final Gson gson = new Gson();
 
@@ -64,10 +58,18 @@ public class APIController {
     private CredentialsProvider credentialsProvider;
 
 
-    public APIController() throws IOException {
+    /**
+     * Initialize all airlines.
+     */
+    public APIController() {
         AIRLINES.add("reliable-airline.com");
         AIRLINES.add("unreliable-airline.com");
     }
+
+    /**
+     *
+     * @return all the flights hosted by reliable-airline.com and unreliable-airline.com
+     */
     @GetMapping("/getFlights")
     public Collection<Flight> getFlights() {
         List<Flight> allFlights = new ArrayList<>();
@@ -222,18 +224,6 @@ public class APIController {
     public void confirmQuotes(@RequestBody List<Quote> quotesToConfirm) throws ExecutionException, InterruptedException {
 
         // Publishing a message:
-        System.out.println("begin of confirmQuote");
-//        Publisher publisher = null;
-//        try {
-//            TopicName topicName = TopicName.of(projectId, topicId);
-//            publisher = Publisher.newBuilder(topicName)
-//                    .setChannelProvider(channelProvider)
-//                    .setCredentialsProvider(credentialsProvider)
-//                    .build();
-//            System.out.println("Topic worked.");
-//        } catch (IOException e) {
-//            throw new RuntimeException(e);
-//        }
 
         // Get customer's name and email.
         User user = WebSecurityConfig.getUser();
@@ -247,70 +237,15 @@ public class APIController {
 
         // Once published, returns a server-assigned message id
         if (publisher != null) {
-            System.out.println("publishing");
             ApiFuture<String> future = publisher.publish(pubSubMsg);
             future.get();
         }
-
-
-
-//        // Transform each quote into a ticket.
-//        for (Quote currentQuote : quotesToConfirm) {
-//            while (true) {
-//                try {
-//                    Ticket ticket = createTicket(currentQuote, customer);
-//                    tickets.add(ticket);
-//                    break;
-//                } catch (Exception e) {
-//                    System.out.println("confirmQuotes6: Pause");
-//                }
-//            }
-//        }
-//        UUID bookingId = UUID.randomUUID();
-//        Booking bookingToConfirm = new Booking(bookingId, LocalDateTime.now(), tickets, customer);
-//        addBooking(bookingToConfirm, customer);
     }
-
-//    /**
-//     * Add a new booking to the database.
-//     * @param quotesToConfirm booking to add to the database.
-//     */
-//    private void addBooking(Booking quotesToConfirm, String customer) {
-////        String quotesAsJson = gson.toJson(quotesToConfirm);
-////
-////        //Construct pub-sub message:
-////        PubsubMessage pubSubMsg = PubsubMessage.newBuilder()
-////                        .putAttributes("quotes", quotesAsJson)
-////                        .putAttributes("customer", customer)
-////                        .build();
-////        ApiFuture<String> messageIdFuture = publisher.
-//        allBookings.add(quotesToConfirm);
-//    }
-
-//    private Ticket createTicket(Quote currentQuote, String customer) {
-//        return this.webClientBuilder
-//                .baseUrl("https://" + currentQuote.getAirline())
-//                .build()
-//                .put()
-//                .uri(uriBuilder -> uriBuilder
-//                        .pathSegment("flights", currentQuote.getFlightId().toString(),
-//                                "seats", currentQuote.getSeatId().toString(),
-//                                "ticket")
-//                        .queryParam("customer", customer)
-//                        .queryParam("bookingReference", "")
-//                        .queryParam("key", API_KEY)
-//                        .build())
-//                .retrieve()
-//                .bodyToMono(Ticket.class)
-//                .block();
-//    }
 
     @GetMapping(value = "/getBookings")
     public List<Booking> getBookings() throws ExecutionException, InterruptedException {
-        System.out.println("Begin of /getBookings");
         List<Booking> customerBookings = new ArrayList<>();
         User currentUser = WebSecurityConfig.getUser();
-        System.out.println("right before getAllBookings");
         List<Booking> allBookings = getAllBookingsFromDb();
         for (Booking b : allBookings) {
             if (b.getCustomer().equalsIgnoreCase(currentUser.getEmail())) {
@@ -344,9 +279,7 @@ public class APIController {
             if (Objects.equals(value, maxvalue))
                 bestCustomers.add(c);
         }
-
         return bestCustomers;
-
     }
 
     /**
@@ -369,14 +302,14 @@ public class APIController {
         List<Booking> allRetrievedBookings = new ArrayList<>();
         System.out.println("begin of getAllBookingsFromDb");
         //database stores bookings as: bookingId
+
         // All bookings:
         List<QueryDocumentSnapshot> allDocuments = db.collection("bookings").get().get().getDocuments();
-//        List<QueryDocumentSnapshot> bookingSnapshots = db.collection("bookings").document().listCollections()
+
         // Queries:
         System.out.println("allDocuments size: " + allDocuments.size());
         for (QueryDocumentSnapshot currentBooking : allDocuments) {
             String bookingId = currentBooking.getData().get("id").toString();
-
             List<Ticket> bookingTickets = getTicketsFromBookingInDb(bookingId);
 
             LocalDateTime bookingTime = LocalDateTime.parse(currentBooking.getData().get("time").toString());
@@ -384,8 +317,6 @@ public class APIController {
             Booking retrievedBooking = new Booking(UUID.fromString(bookingId), bookingTime, bookingTickets, bookingCustomer);
             allRetrievedBookings.add(retrievedBooking);
         }
-        System.out.println("allBookings: " + allRetrievedBookings);
-        System.out.println("end of getAllBookingsFromDb");
         return allRetrievedBookings;
     }
 
@@ -397,8 +328,7 @@ public class APIController {
         for (QueryDocumentSnapshot ticket : ticketQueries) {
             String ticketId = ticket.getData().get("ticketId").toString();
             DocumentSnapshot t = bookings.document(ticketId).get().get();
-
-            String airline = Objects.requireNonNull(t.getData()).get("airline").toString();
+            String airline = t.getData().get("airline").toString();
             UUID flightId = UUID.fromString(t.getData().get("flightId").toString());
             UUID seatId = UUID.fromString(t.getData().get("seatId").toString());
             UUID ticketIdAsUUID = UUID.fromString(ticketId);

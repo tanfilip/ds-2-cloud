@@ -13,9 +13,9 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import org.eclipse.jetty.util.ajax.JSON;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -33,21 +33,13 @@ public class pubSubController {
 
     private final Gson gson = new Gson();
     private final JsonParser jsonParser = new JsonParser();
-
     @Resource(name="webClientBuilder")
     private WebClient.Builder webClientBuilder;
-
-//    @Resource(name = "reliableClientBuilder")
-//    WebClient.Builder reliableClientBuilder;
-//
-//    @Resource(name = "unreliableClientBuilder")
-//    WebClient.Builder unreliableClientBuilder;
-
     @Resource(name = "db")
     Firestore db;
 
     @PostMapping("/subs")
-    public ResponseEntity<String> subscription(@RequestBody String body) {
+    public ResponseEntity<String> subscription(@RequestBody String body) throws ExecutionException, InterruptedException {
         System.out.println("\r\ngot to post /subs BEGIN\r\n");
         JsonElement jsonRoot = jsonParser.parse(body);
         JsonElement msg = jsonRoot.getAsJsonObject().get("message");
@@ -61,27 +53,94 @@ public class pubSubController {
         String customer = gson.fromJson((String) JSON.parse(String.valueOf(customerAsJson)), String.class);
         String bookingReference = UUID.randomUUID().toString();
 
-        List<Ticket> ticketsFromQuotes = changeQuotesToTickets(quotesToConfirm, customer, bookingReference);
+        List<Ticket> ticketsFromQuotes = getTickets(quotesToConfirm, customer, bookingReference);
+        System.out.println("getTicketsfinished");
         for (Ticket t : ticketsFromQuotes)
-            System.out.println(t.getTicketId());
-//        addBookingToDatabase(ticketsFromQuotes, customer);
-
-
+            System.out.println("TicketId: " + t.getTicketId());
+        if (ticketsFromQuotes.size() != 0) {
+            addBookingToDatabase(ticketsFromQuotes, customer);
+        }
         return ResponseEntity.status(HttpStatus.OK).body("OK");
 
     }
 
+    private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer, String bookingReference) {
+        List<Ticket> ticketsFromQuotes = new ArrayList<>();
+        System.out.println("got to getTickets");
+        System.out.println("size quotes: " + quotesToConfirm.size());
+        try {
+            for (Quote q: quotesToConfirm) {
+                Ticket ticket = putTicket(q, customer, bookingReference);
+                ticketsFromQuotes.add(ticket);
+                System.out.println("ticket added");
+            }
+        } catch (Exception e) {
+            System.out.println("putTicket failed");
+            deleteBookedTicket(ticketsFromQuotes);
+        }
+
+        return ticketsFromQuotes;
+    }
+
+    private Ticket putTicket(Quote q, String customer, String bookingReference) {
+        System.out.println("got to putTicket");
+        return this.webClientBuilder
+                .baseUrl("https://" + q.getAirline())
+                .build()
+                .put()
+                .uri(uriBuilder -> uriBuilder
+                        .pathSegment("flights", q.getFlightId().toString(),
+                                "seats", q.getSeatId().toString(),
+                                "ticket")
+                        .queryParam("customer", customer)
+                        .queryParam("bookingReference", bookingReference)
+                        .queryParam("key", API_KEY)
+                        .build())
+                .retrieve()
+                .onStatus(HttpStatus.CONFLICT::equals,
+                        response -> Mono.error(new seatAlreadyBookedException(q)))
+                .bodyToMono(new ParameterizedTypeReference<Ticket>() {
+                })
+                .retry(3)
+//                .retryWhen(Retry.max(3))
+                .block();
+    }
+
+    private Ticket getBookedTicket(Quote q, String customer) {
+        // Get-ticket:
+        System.out.println("Got to getBookedTicket");
+        System.out.println("https://" + q.getAirline()  + "/flights/" + q.getFlightId() + "/seats/" + q.getSeatId() + "/ticket?key=" + API_KEY);
+        return this.webClientBuilder
+                .baseUrl("https://" + q.getAirline())
+                .build()
+                .get()
+                .uri(uriBuilder -> uriBuilder
+                        .pathSegment("flights", q.getFlightId().toString(),
+                                "seats", q.getSeatId().toString(),
+                                "ticket")
+                        .queryParam("key", API_KEY)
+                        .build())
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Ticket>() {
+                })
+//                .retryWhen(Retry.max(3))
+                .block();
+    }
+
     private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer) throws ExecutionException, InterruptedException {
+
+        System.out.println("got to addBookingToDatabase");
         LocalDateTime currentBookingTime = LocalDateTime.now();
+        System.out.println("Time created");
 
         CollectionReference bookings = db.collection("bookings");
         Booking newBooking = new Booking(UUID.randomUUID(),currentBookingTime, ticketsFromQuotes, customer);
+        System.out.println("newBooking created: " + newBooking.getId());
 
         // BookingData is structured like booking => contains id, time, tickets and customers.
         Map<String, Object> bookingData = new HashMap<>();
         bookingData.put("id", newBooking.getId().toString());
-        bookingData.put("time", newBooking.getTime());
-        bookingData.put("tickets", newBooking.getTickets());
+        bookingData.put("time", newBooking.getTime().toString());
         bookingData.put("customer", newBooking.getCustomer());
 
         addTicketsToDb(newBooking);
@@ -90,143 +149,45 @@ public class pubSubController {
         future.get();
     }
 
-    private void addTicketsToDb(Booking newBooking) {
+    private void addTicketsToDb(Booking newBooking) throws ExecutionException, InterruptedException {
         for (Ticket t : newBooking.getTickets()) {
             Map<String, Object> ticketData = new HashMap<>();
 
             ticketData.put("airline", t.getAirline());
-            ticketData.put("flightId", t.getFlightId());
-            ticketData.put("seatId", t.getSeatId());
-            ticketData.put("ticketId", t.getTicketId());
+            ticketData.put("flightId", t.getFlightId().toString());
+            ticketData.put("seatId", t.getSeatId().toString());
+            ticketData.put("ticketId", t.getTicketId().toString());
             ticketData.put("customer", t.getCustomer());
             ticketData.put("bookingReference", t.getBookingReference());
 
             ApiFuture<WriteResult> future = db.collection("bookings").document(newBooking.getId().toString())
                     .collection("tickets").document(t.getTicketId().toString()).set(ticketData);
+            future.get();
+            System.out.println("Ticket successfully added.");
         }
     }
 
-    private List<Ticket> changeQuotesToTickets(List<Quote> quotesToConfirm, String customer, String bookingReference) {
-        List<Ticket> ticketsFromQuotes = new ArrayList<>();
-        System.out.println("got to changeQuotesToTickets");
-        System.out.println(quotesToConfirm.size());
-        for (Quote q : quotesToConfirm) {
-            Ticket ticket = this.webClientBuilder
-                    .baseUrl("https://" + q.getAirline())
+
+    private void deleteBookedTicket(List<Ticket> bookedTickets) {
+        // delete-ticket;
+        System.out.println("size of booked tickets: " + bookedTickets.size());
+        for (Ticket t: bookedTickets) {
+            this.webClientBuilder
+                    .baseUrl("https://" + t.getAirline())
                     .build()
-                    .put()
+                    .delete()
                     .uri(uriBuilder -> uriBuilder
-                            .pathSegment("flights", q.getFlightId().toString(),
-                                    "seats", q.getSeatId().toString(),
-                                    "ticket")
-                            .queryParam("customer", customer)
-                            .queryParam("bookingReference", "")
+                            .pathSegment("flights", t.getFlightId().toString(),
+                                    "seats", t.getSeatId().toString(),
+                                    "ticket", t.getTicketId().toString())
                             .queryParam("key", API_KEY)
                             .build())
                     .retrieve()
-//                    .onStatus(HttpStatus.CONFLICT::equals,
-//                            response -> Mono.error(new seatAlreadyBookedException(q)))
-                    .bodyToMono(Ticket.class)
-//                    .retryWhen(Retry.max(3))
+                    .bodyToMono(void.class)
+                    .retry(3)
                     .block();
-            ticketsFromQuotes.add(ticket);
+            System.out.println("succesfully deleted 1");
         }
-        return ticketsFromQuotes;
-
-    }
-
-    private void deleteBookedTicket(List<Ticket> bookedTickets, Quote q) {
-        System.out.println("size of booked tickets: " + bookedTickets.size());
-        while (true) {
-            try {
-                Ticket foundTicket = this.webClientBuilder
-                        .baseUrl("https://" + q.getAirline())
-                        .build()
-                        .get()
-                        .uri(uriBuilder -> uriBuilder
-                                .pathSegment("flights", q.getFlightId().toString(),
-                                        "seats", q.getSeatId().toString(),
-                                        "ticket")
-                                .queryParam("key", API_KEY)
-                                .build())
-                        .retrieve()
-                        .bodyToMono(Ticket.class)
-                        .block();
-                System.out.println("test: " + foundTicket.toString());
-                this.webClientBuilder
-                        .baseUrl("https://" + foundTicket.getAirline())
-                        .build()
-                        .delete()
-                        .uri(uriBuilder -> uriBuilder
-                                .pathSegment("flights", foundTicket.getFlightId().toString(),
-                                        "seats", foundTicket.getSeatId().toString(),
-                                        "ticket", foundTicket.getTicketId().toString())
-                                .queryParam("key", API_KEY)
-                                .build())
-                        .retrieve()
-                        .bodyToMono(void.class)
-                        .retryWhen(Retry.max(3));
-                break;
-            } catch (Exception e) {
-                System.out.println("Ticket not found...");
-            }
-        }
-//        for (Ticket ticket : bookedTickets) {
-//            while (true) {
-//                try {
-//                    this.webClientBuilder
-//                            .baseUrl("https://" + ticket.getAirline())
-//                            .build()
-//                            .delete()
-//                            .uri(uriBuilder -> uriBuilder
-//                                    .pathSegment("flights", ticket.getFlightId().toString(),
-//                                            "seats", ticket.getSeatId().toString(),
-//                                            "ticket", ticket.getTicketId().toString())
-//                                    .queryParam("key", API_KEY)
-//                                    .build())
-//                            .retrieve()
-//                            .bodyToMono(void.class)
-//                            .block();
-//                } catch (Exception e) {
-//                    System.out.println("trying to delete this ticket");
-//                }
-//            }
-//
-//        }
         System.out.println("successfully deleted all booked tickets.");
     }
-
-//    private Ticket createTicket(Quote currentQuote, String bookingRef, String customer) {
-//        while (true) {
-//            try {
-//                return this.webClientBuilder
-//                        .baseUrl("https://" + currentQuote.getAirline())
-//                        .build()
-//                        .put()
-//                        .uri(uriBuilder -> uriBuilder
-//                                .pathSegment("flights", currentQuote.getFlightId().toString(),
-//                                        "seats", currentQuote.getSeatId().toString(),
-//                                        "ticket")
-//                                .queryParam("customer", customer)
-//                                .queryParam("bookingReference", bookingRef)
-//                                .queryParam("key", API_KEY)
-//                                .build())
-//                        .retrieve()
-//                        .onStatus(HttpStatus.CONFLICT::equals,
-//                                response -> Mono.error(new seatAlreadyBookedException(currentQuote)))
-//                        .bodyToMono(Ticket.class)
-//                        .block();
-//            } catch (Exception e) {
-//                if (e.getClass().equals(seatAlreadyBookedException.class)) {
-//                    deleteBookedTicket();
-//                }
-//                System.out.println("Exception:" + e.getClass().equals(seatAlreadyBookedException.class));
-//                System.out.println("createTicket failed");
-//            }
-//        }
-//
-//
-//    }
-
-
 }
