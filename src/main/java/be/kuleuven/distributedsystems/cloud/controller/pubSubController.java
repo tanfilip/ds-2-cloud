@@ -51,12 +51,9 @@ public class pubSubController {
         Type listQuoteType = new TypeToken<ArrayList<Quote>>() {}.getType();
         List<Quote> quotesToConfirm = gson.fromJson((String) JSON.parse(String.valueOf(quotesAsJson)), listQuoteType);
         String customer = gson.fromJson((String) JSON.parse(String.valueOf(customerAsJson)), String.class);
-        String bookingReference = UUID.randomUUID().toString();
 
-        List<Ticket> ticketsFromQuotes = getTickets(quotesToConfirm, customer, bookingReference);
+        List<Ticket> ticketsFromQuotes = getTickets(quotesToConfirm, customer);
         System.out.println("getTicketsfinished");
-        for (Ticket t : ticketsFromQuotes)
-            System.out.println("TicketId: " + t.getTicketId());
         if (ticketsFromQuotes.size() != 0) {
             addBookingToDatabase(ticketsFromQuotes, customer);
         }
@@ -64,13 +61,13 @@ public class pubSubController {
 
     }
 
-    private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer, String bookingReference) {
+    private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer) {
         List<Ticket> ticketsFromQuotes = new ArrayList<>();
         System.out.println("got to getTickets");
         System.out.println("size quotes: " + quotesToConfirm.size());
         try {
             for (Quote q: quotesToConfirm) {
-                Ticket ticket = putTicket(q, customer, bookingReference);
+                Ticket ticket = putTicket(q, customer);
                 ticketsFromQuotes.add(ticket);
                 System.out.println("ticket added");
             }
@@ -82,7 +79,7 @@ public class pubSubController {
         return ticketsFromQuotes;
     }
 
-    private Ticket putTicket(Quote q, String customer, String bookingReference) {
+    private Ticket putTicket(Quote q, String customer) {
         System.out.println("got to putTicket");
         return this.webClientBuilder
                 .baseUrl("https://" + q.getAirline())
@@ -93,7 +90,7 @@ public class pubSubController {
                                 "seats", q.getSeatId().toString(),
                                 "ticket")
                         .queryParam("customer", customer)
-                        .queryParam("bookingReference", bookingReference)
+                        .queryParam("bookingReference", "")
                         .queryParam("key", API_KEY)
                         .build())
                 .retrieve()
@@ -128,44 +125,40 @@ public class pubSubController {
     }
 
     private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer) throws ExecutionException, InterruptedException {
-
-        System.out.println("got to addBookingToDatabase");
-        LocalDateTime currentBookingTime = LocalDateTime.now();
-        System.out.println("Time created");
-
-        CollectionReference bookings = db.collection("bookings");
-        Booking newBooking = new Booking(UUID.randomUUID(),currentBookingTime, ticketsFromQuotes, customer);
-        System.out.println("newBooking created: " + newBooking.getId());
+        String currentBookingTime = LocalDateTime.now().toString();
+        System.out.println("addBookingToDatabase");
+        System.out.println(ticketsFromQuotes.size());
+        String bookingId = UUID.randomUUID().toString();
+        String ticketsAsJSON = gson.toJson(ticketsFromQuotes);
 
         // BookingData is structured like booking => contains id, time, tickets and customers.
         Map<String, Object> bookingData = new HashMap<>();
-        bookingData.put("id", newBooking.getId().toString());
-        bookingData.put("time", newBooking.getTime().toString());
-        bookingData.put("customer", newBooking.getCustomer());
+        bookingData.put("id", bookingId);
+        bookingData.put("time", currentBookingTime);
+        bookingData.put("tickets", ticketsAsJSON);
+        bookingData.put("customer", customer);
 
-        addTicketsToDb(newBooking);
-        String bookingId = newBooking.getId().toString();
-        ApiFuture<WriteResult> future = bookings.document(bookingId).set(bookingData);
+        ApiFuture<WriteResult> future = db.collection("bookings").document(bookingId).set(bookingData);
         future.get();
     }
 
-    private void addTicketsToDb(Booking newBooking) throws ExecutionException, InterruptedException {
-        for (Ticket t : newBooking.getTickets()) {
-            Map<String, Object> ticketData = new HashMap<>();
-
-            ticketData.put("airline", t.getAirline());
-            ticketData.put("flightId", t.getFlightId().toString());
-            ticketData.put("seatId", t.getSeatId().toString());
-            ticketData.put("ticketId", t.getTicketId().toString());
-            ticketData.put("customer", t.getCustomer());
-            ticketData.put("bookingReference", t.getBookingReference());
-
-            ApiFuture<WriteResult> future = db.collection("bookings").document(newBooking.getId().toString())
-                    .collection("tickets").document(t.getTicketId().toString()).set(ticketData);
-            future.get();
-            System.out.println("Ticket successfully added.");
-        }
-    }
+//    private void addTicketsToDb(Booking newBooking) throws ExecutionException, InterruptedException {
+//        for (Ticket t : newBooking.getTickets()) {
+//            Map<String, Object> ticketData = new HashMap<>();
+//
+//            ticketData.put("airline", t.getAirline());
+//            ticketData.put("flightId", t.getFlightId().toString());
+//            ticketData.put("seatId", t.getSeatId().toString());
+//            ticketData.put("ticketId", t.getTicketId().toString());
+//            ticketData.put("customer", t.getCustomer());
+//            ticketData.put("bookingReference", t.getBookingReference());
+//
+//            ApiFuture<WriteResult> future = db.collection("bookings").document(newBooking.getId().toString())
+//                    .collection("tickets").document(t.getTicketId().toString()).set(ticketData);
+//            future.get();
+//            System.out.println("Ticket successfully added.");
+//        }
+//    }
 
 
     private void deleteBookedTicket(List<Ticket> bookedTickets) {
