@@ -65,6 +65,7 @@ public class Application {
     public static String topicId() {
         return TOPIC;
     }
+
     /*
      * You can use this builder to create a Spring WebClient instance which can be used to make REST-calls.
      */
@@ -75,6 +76,10 @@ public class Application {
                 .codecs(clientCodecConfigurer -> clientCodecConfigurer.defaultCodecs().maxInMemorySize(100 * 1024 * 1024)));
     }
 
+    /**
+     * Create topic for Pub/Sub
+     * @throws IOException I/O problem
+     */
     private static void createTopic() throws IOException {
         TopicAdminClient topicAdminClient =
                 TopicAdminClient.create(
@@ -92,6 +97,11 @@ public class Application {
         }
 //        initSub();
     }
+
+    /**
+     * Initiate the subscription
+     * @throws IOException i/o exception
+     */
     private static void initSub() throws IOException {
         PushConfig pushConfig = PushConfig.newBuilder()
                 .setPushEndpoint("http://localhost:8080/subs")
@@ -116,23 +126,11 @@ public class Application {
         TopicName topicName = TopicName.of(projectId(), topicId());
         createTopic();
         initSub();
-//        TransportChannelProvider channelProvider = FixedTransportChannelProvider.create(
-//                GrpcTransportChannel.create(
-//                        ManagedChannelBuilder.forTarget("localhost:8083").usePlaintext().build()
-//                )
-//        );
-//        CredentialsProvider credentialsProvider = NoCredentialsProvider.create();
         return Publisher
                 .newBuilder(topicName)
                 .setChannelProvider(pubSubTransportChannelProvider())
                 .setCredentialsProvider(pubSubCredentialsProvider())
                 .build();
-    }
-
-
-
-    private static String getSubName() {
-        return "confirmQuotes";
     }
 
     @Bean

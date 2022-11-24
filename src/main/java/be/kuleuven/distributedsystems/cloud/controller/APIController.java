@@ -16,17 +16,16 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.pubsub.v1.PubsubMessage;
-import org.eclipse.jetty.util.ajax.JSON;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.hateoas.CollectionModel;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.util.retry.Retry;
 
 import javax.annotation.Resource;
 
-import java.io.IOException;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -228,7 +227,7 @@ public class APIController {
 
     @PostMapping(value = "/confirmQuotes")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void confirmQuotes(@RequestBody List<Quote> quotesToConfirm) throws ExecutionException, InterruptedException {
+    public ResponseEntity publishQuotes(@RequestBody List<Quote> quotesToConfirm) throws ExecutionException, InterruptedException {
 
         // Publishing a message:
 
@@ -246,7 +245,13 @@ public class APIController {
         if (publisher != null) {
             ApiFuture<String> future = publisher.publish(pubSubMsg);
             future.get();
+            return ResponseEntity
+                    .status(HttpStatus.NO_CONTENT)
+                    .body("");
         }
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body("Not found");
     }
 
     @GetMapping(value = "/getBookings")
@@ -305,6 +310,12 @@ public class APIController {
         return customers;
     }
 
+    /**
+     * Helper function
+     * @return list of all the bookings stored in the Firestore Database.
+     * @throws ExecutionException if db.collection("bookings").get.get throws an exception during the getter.
+     * @throws InterruptedException if db.collection("bookings").get().get() was interrupted while searching
+      */
     private List<Booking> getAllBookingsFromDb() throws ExecutionException, InterruptedException {
         List<Booking> allRetrievedBookings = new ArrayList<>();
         System.out.println("begin of getAllBookingsFromDb");
@@ -331,8 +342,6 @@ public class APIController {
             Type listTicketType = new TypeToken<ArrayList<Ticket>>() {}.getType();
             List<Ticket> bookingTickets = gson.fromJson(ticketsAsJSON, listTicketType);
 
-
-
             LocalDateTime bookingTime = LocalDateTime.parse(currentBooking.getData().get("time").toString());
             String bookingCustomer = currentBooking.getData().get("customer").toString();
             Booking retrievedBooking = new Booking(UUID.fromString(bookingId), bookingTime, bookingTickets, bookingCustomer);
@@ -340,28 +349,5 @@ public class APIController {
         }
         return allRetrievedBookings;
     }
-
-//    private List<Ticket> getTicketsFromBookingInDb(String bookingId) throws ExecutionException, InterruptedException {
-//        List<Ticket> bookingTickets = new ArrayList<>();
-//
-//        CollectionReference bookings = db.collection("bookings").document(bookingId).collection("tickets");
-//        List<QueryDocumentSnapshot> ticketQueries = bookings.get().get().getDocuments();
-//        for (QueryDocumentSnapshot ticket : ticketQueries) {
-//            String ticketId = ticket.getData().get("ticketId").toString();
-//            DocumentSnapshot t = bookings.document(ticketId).get().get();
-//            String airline = t.getData().get("airline").toString();
-//            UUID flightId = UUID.fromString(t.getData().get("flightId").toString());
-//            UUID seatId = UUID.fromString(t.getData().get("seatId").toString());
-//            UUID ticketIdAsUUID = UUID.fromString(ticketId);
-//            String customer = t.getData().get("customer").toString();
-//            String bookingReference = t.getData().get("bookingReference").toString();
-//
-//            Ticket retrievedTicket = new Ticket(airline, flightId,seatId, ticketIdAsUUID, customer, bookingReference);
-//            bookingTickets.add(retrievedTicket);
-//        }
-//
-//        return bookingTickets;
-//    }
-
 
 }

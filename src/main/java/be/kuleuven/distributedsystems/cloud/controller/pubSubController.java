@@ -1,11 +1,9 @@
 package be.kuleuven.distributedsystems.cloud.controller;
 
-import be.kuleuven.distributedsystems.cloud.entities.Booking;
 import be.kuleuven.distributedsystems.cloud.entities.Quote;
 import be.kuleuven.distributedsystems.cloud.entities.Ticket;
 import be.kuleuven.distributedsystems.cloud.exceptions.seatAlreadyBookedException;
 import com.google.api.core.ApiFuture;
-import com.google.cloud.firestore.CollectionReference;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.WriteResult;
 import com.google.common.reflect.TypeToken;
@@ -19,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-import reactor.util.retry.Retry;
 
 import javax.annotation.Resource;
 import java.lang.reflect.Type;
@@ -39,19 +36,21 @@ public class pubSubController {
     Firestore db;
 
     @PostMapping("/subs")
-    public ResponseEntity<String> subscription(@RequestBody String body) throws ExecutionException, InterruptedException {
-        System.out.println("\r\ngot to post /subs BEGIN\r\n");
+    public ResponseEntity<String> confirmQuotes(@RequestBody String body) throws ExecutionException, InterruptedException {
         JsonElement jsonRoot = jsonParser.parse(body);
         JsonElement msg = jsonRoot.getAsJsonObject().get("message");
         JsonElement attributes = msg.getAsJsonObject().get("attributes");
 
+        // Receive the pushed pubsub message.
         JsonElement quotesAsJson = attributes.getAsJsonObject().get("quotes");
         JsonElement customerAsJson = attributes.getAsJsonObject().get("customer");
 
+        // Deserialize the quotes and customer.
         Type listQuoteType = new TypeToken<ArrayList<Quote>>() {}.getType();
         List<Quote> quotesToConfirm = gson.fromJson((String) JSON.parse(String.valueOf(quotesAsJson)), listQuoteType);
         String customer = gson.fromJson((String) JSON.parse(String.valueOf(customerAsJson)), String.class);
 
+        // try to make PUT requests.
         List<Ticket> ticketsFromQuotes = getTickets(quotesToConfirm, customer);
         System.out.println("getTicketsfinished");
         if (ticketsFromQuotes.size() != 0) {
@@ -61,6 +60,12 @@ public class pubSubController {
 
     }
 
+    /**
+     * Try to make PUT request for each quote, if one PUT request fails, delete them all.
+     * @param quotesToConfirm quotes given by publisher, that need to be turned into tickets.
+     * @param customer the customer's email address used as customer reference.
+     * @return list of tickets gotten from quotes.
+     */
     private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer) {
         List<Ticket> ticketsFromQuotes = new ArrayList<>();
         System.out.println("got to getTickets");
@@ -79,15 +84,21 @@ public class pubSubController {
         return ticketsFromQuotes;
     }
 
-    private Ticket putTicket(Quote q, String customer) {
+    /**
+     * sends a PUT request to the webserver to get the ticket and makes the seat taken.
+     * @param quote received quote
+     * @param customer the customer's email address.
+     * @return the ticket for the taken seat.
+     */
+    private Ticket putTicket(Quote quote, String customer) {
         System.out.println("got to putTicket");
         return this.webClientBuilder
-                .baseUrl("https://" + q.getAirline())
+                .baseUrl("https://" + quote.getAirline())
                 .build()
                 .put()
                 .uri(uriBuilder -> uriBuilder
-                        .pathSegment("flights", q.getFlightId().toString(),
-                                "seats", q.getSeatId().toString(),
+                        .pathSegment("flights", quote.getFlightId().toString(),
+                                "seats", quote.getSeatId().toString(),
                                 "ticket")
                         .queryParam("customer", customer)
                         .queryParam("bookingReference", "")
@@ -95,7 +106,7 @@ public class pubSubController {
                         .build())
                 .retrieve()
                 .onStatus(HttpStatus.CONFLICT::equals,
-                        response -> Mono.error(new seatAlreadyBookedException(q)))
+                        response -> Mono.error(new seatAlreadyBookedException(quote)))
                 .bodyToMono(new ParameterizedTypeReference<Ticket>() {
                 })
                 .retry(3)
@@ -103,27 +114,13 @@ public class pubSubController {
                 .block();
     }
 
-    private Ticket getBookedTicket(Quote q, String customer) {
-        // Get-ticket:
-        System.out.println("Got to getBookedTicket");
-        System.out.println("https://" + q.getAirline()  + "/flights/" + q.getFlightId() + "/seats/" + q.getSeatId() + "/ticket?key=" + API_KEY);
-        return this.webClientBuilder
-                .baseUrl("https://" + q.getAirline())
-                .build()
-                .get()
-                .uri(uriBuilder -> uriBuilder
-                        .pathSegment("flights", q.getFlightId().toString(),
-                                "seats", q.getSeatId().toString(),
-                                "ticket")
-                        .queryParam("key", API_KEY)
-                        .build())
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Ticket>() {
-                })
-//                .retryWhen(Retry.max(3))
-                .block();
-    }
-
+    /**
+     * add the booking to the Firestore database as a JSON.
+     * @param ticketsFromQuotes list of tickets that need to be booked.
+     * @param customer the customer's email address, used as customer's reference.
+     * @throws ExecutionException when storing the booking fails.
+     * @throws InterruptedException when storing the booking is interrupted by something.
+     */
     private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer) throws ExecutionException, InterruptedException {
         String currentBookingTime = LocalDateTime.now().toString();
         System.out.println("addBookingToDatabase");
@@ -142,25 +139,10 @@ public class pubSubController {
         future.get();
     }
 
-//    private void addTicketsToDb(Booking newBooking) throws ExecutionException, InterruptedException {
-//        for (Ticket t : newBooking.getTickets()) {
-//            Map<String, Object> ticketData = new HashMap<>();
-//
-//            ticketData.put("airline", t.getAirline());
-//            ticketData.put("flightId", t.getFlightId().toString());
-//            ticketData.put("seatId", t.getSeatId().toString());
-//            ticketData.put("ticketId", t.getTicketId().toString());
-//            ticketData.put("customer", t.getCustomer());
-//            ticketData.put("bookingReference", t.getBookingReference());
-//
-//            ApiFuture<WriteResult> future = db.collection("bookings").document(newBooking.getId().toString())
-//                    .collection("tickets").document(t.getTicketId().toString()).set(ticketData);
-//            future.get();
-//            System.out.println("Ticket successfully added.");
-//        }
-//    }
-
-
+    /**
+     * if a seat in the cart is taken, delete all the already booked tickets in the cart.
+     * @param bookedTickets the already booked tickets.
+     */
     private void deleteBookedTicket(List<Ticket> bookedTickets) {
         // delete-ticket;
         System.out.println("size of booked tickets: " + bookedTickets.size());
