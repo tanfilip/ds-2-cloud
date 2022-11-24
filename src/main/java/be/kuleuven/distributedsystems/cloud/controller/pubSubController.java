@@ -50,11 +50,13 @@ public class pubSubController {
         List<Quote> quotesToConfirm = gson.fromJson((String) JSON.parse(String.valueOf(quotesAsJson)), listQuoteType);
         String customer = gson.fromJson((String) JSON.parse(String.valueOf(customerAsJson)), String.class);
 
+        String bookingReference = UUID.randomUUID().toString();
+
         // try to make PUT requests.
-        List<Ticket> ticketsFromQuotes = getTickets(quotesToConfirm, customer);
+        List<Ticket> ticketsFromQuotes = getTickets(quotesToConfirm, customer, bookingReference);
         System.out.println("getTicketsfinished");
         if (ticketsFromQuotes.size() != 0) {
-            addBookingToDatabase(ticketsFromQuotes, customer);
+            addBookingToDatabase(ticketsFromQuotes, customer, bookingReference);
         }
         return ResponseEntity.status(HttpStatus.OK).body("OK");
 
@@ -64,15 +66,16 @@ public class pubSubController {
      * Try to make PUT request for each quote, if one PUT request fails, delete them all.
      * @param quotesToConfirm quotes given by publisher, that need to be turned into tickets.
      * @param customer the customer's email address used as customer reference.
+     * @param bookingReference reference to booking ID
      * @return list of tickets gotten from quotes.
      */
-    private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer) {
+    private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer, String bookingReference) {
         List<Ticket> ticketsFromQuotes = new ArrayList<>();
         System.out.println("got to getTickets");
         System.out.println("size quotes: " + quotesToConfirm.size());
         try {
             for (Quote q: quotesToConfirm) {
-                Ticket ticket = putTicket(q, customer);
+                Ticket ticket = putTicket(q, customer, bookingReference);
                 ticketsFromQuotes.add(ticket);
                 System.out.println("ticket added");
             }
@@ -88,9 +91,10 @@ public class pubSubController {
      * sends a PUT request to the webserver to get the ticket and makes the seat taken.
      * @param quote received quote
      * @param customer the customer's email address.
+     * @param bookingReference reference to booking ID
      * @return the ticket for the taken seat.
      */
-    private Ticket putTicket(Quote quote, String customer) {
+    private Ticket putTicket(Quote quote, String customer, String bookingReference) {
         System.out.println("got to putTicket");
         return this.webClientBuilder
                 .baseUrl("https://" + quote.getAirline())
@@ -101,7 +105,7 @@ public class pubSubController {
                                 "seats", quote.getSeatId().toString(),
                                 "ticket")
                         .queryParam("customer", customer)
-                        .queryParam("bookingReference", "")
+                        .queryParam("bookingReference", bookingReference)
                         .queryParam("key", API_KEY)
                         .build())
                 .retrieve()
@@ -118,14 +122,14 @@ public class pubSubController {
      * add the booking to the Firestore database as a JSON.
      * @param ticketsFromQuotes list of tickets that need to be booked.
      * @param customer the customer's email address, used as customer's reference.
+     * @param bookingId random UUID as string created to identify a booking
      * @throws ExecutionException when storing the booking fails.
      * @throws InterruptedException when storing the booking is interrupted by something.
      */
-    private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer) throws ExecutionException, InterruptedException {
+    private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer, String bookingId) throws ExecutionException, InterruptedException {
         String currentBookingTime = LocalDateTime.now().toString();
         System.out.println("addBookingToDatabase");
         System.out.println(ticketsFromQuotes.size());
-        String bookingId = UUID.randomUUID().toString();
         String ticketsAsJSON = gson.toJson(ticketsFromQuotes);
 
         // BookingData is structured like booking => contains id, time, tickets and customers.

@@ -206,23 +206,19 @@ public class APIController {
     public Seat getSeat(@RequestParam("airline") String airline,
                         @RequestParam("flightId") String flightId,
                         @RequestParam("seatId") String seatId) {
-        while (true) {
-            try {
-                return this.webClientBuilder
-                        .baseUrl("https://" + airline)
-                        .build()
-                        .get()
-                        .uri(uriBuilder -> uriBuilder
-                                .pathSegment("flights", flightId, "seats", seatId)
-                                .queryParam("key", API_KEY)
-                                .build())
-                        .retrieve()
-                        .bodyToMono(new ParameterizedTypeReference<Seat>() {})
-                        .block();
-            } catch (Exception e) {
-                System.out.println("getSeat5: Pause");
-            }
-        }
+        return this.webClientBuilder
+                .baseUrl("https://" + airline)
+                .build()
+                .get()
+                .uri(uriBuilder -> uriBuilder
+                        .pathSegment("flights", flightId, "seats", seatId)
+                        .queryParam("key", API_KEY)
+                        .build())
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Seat>() {})
+                .retryWhen(Retry.max(3))
+                .block();
+
     }
 
     @PostMapping(value = "/confirmQuotes")
