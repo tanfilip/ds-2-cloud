@@ -79,27 +79,26 @@ public class APIController {
     @GetMapping("/getFlights")
     public Collection<Flight> getFlights() {
         List<Flight> allFlights = new ArrayList<>();
-//        boolean flightsNotFound;
         for (String currentAirline : AIRLINES) {
-//            boolean flightsNotFound = true;
-            Collection<Flight> currentFlights = this.webClientBuilder
-                    .baseUrl("https://" + currentAirline)
-                    .build()
-                    .get()
-                    .uri(uriBuilder -> uriBuilder
-                            .pathSegment("flights")
-                            .queryParam("key", API_KEY)
-                            .build())
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<CollectionModel<Flight>>() {
-                    })
+            try {
+                Collection<Flight> currentFlights = this.webClientBuilder
+                        .baseUrl("https://" + currentAirline)
+                        .build()
+                        .get()
+                        .uri(uriBuilder -> uriBuilder
+                                .pathSegment("flights")
+                                .queryParam("key", API_KEY)
+                                .build())
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<CollectionModel<Flight>>() {
+                        })
                     .retryWhen(Retry.max(3))
-                    .block()
-                    .getContent();
-            allFlights.addAll(currentFlights);
-
-
-
+                        .block()
+                        .getContent();
+                allFlights.addAll(currentFlights);
+            } catch (Exception e) {
+                return allFlights;
+            }
         }
         return allFlights;
     }
@@ -223,7 +222,7 @@ public class APIController {
 
     @PostMapping(value = "/confirmQuotes")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public ResponseEntity publishQuotes(@RequestBody List<Quote> quotesToConfirm) throws ExecutionException, InterruptedException {
+    public void confirmQuotes(@RequestBody List<Quote> quotesToConfirm) throws ExecutionException, InterruptedException {
 
         // Publishing a message:
 
@@ -241,13 +240,7 @@ public class APIController {
         if (publisher != null) {
             ApiFuture<String> future = publisher.publish(pubSubMsg);
             future.get();
-            return ResponseEntity
-                    .status(HttpStatus.NO_CONTENT)
-                    .body("");
         }
-        return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body("Not found");
     }
 
     @GetMapping(value = "/getBookings")
