@@ -51,23 +51,24 @@ public class pubSubController {
         Type listQuoteType = new TypeToken<ArrayList<Quote>>() {}.getType();
         List<Quote> quotesToConfirm = gson.fromJson((String) JSON.parse(String.valueOf(quotesAsJson)), listQuoteType);
         String customer = gson.fromJson((String) JSON.parse(String.valueOf(customerAsJson)), String.class);
+        String bookingReference = UUID.randomUUID().toString();
 
-        List<Ticket> ticketsFromQuotes = getTickets(quotesToConfirm, customer);
+        List<Ticket> ticketsFromQuotes = getTickets(quotesToConfirm, customer, bookingReference);
         System.out.println("getTicketsfinished");
         if (ticketsFromQuotes.size() != 0) {
-            addBookingToDatabase(ticketsFromQuotes, customer);
+            addBookingToDatabase(ticketsFromQuotes, customer, bookingReference);
         }
         return ResponseEntity.status(HttpStatus.OK).body("OK");
 
     }
 
-    private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer) {
+    private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer, String bookingReference) {
         List<Ticket> ticketsFromQuotes = new ArrayList<>();
         System.out.println("got to getTickets");
         System.out.println("size quotes: " + quotesToConfirm.size());
         try {
             for (Quote q: quotesToConfirm) {
-                Ticket ticket = putTicket(q, customer);
+                Ticket ticket = putTicket(q, customer, bookingReference);
                 ticketsFromQuotes.add(ticket);
                 System.out.println("ticket added");
             }
@@ -79,7 +80,7 @@ public class pubSubController {
         return ticketsFromQuotes;
     }
 
-    private Ticket putTicket(Quote q, String customer) {
+    private Ticket putTicket(Quote q, String customer, String bookingReference) {
         System.out.println("got to putTicket");
         return this.webClientBuilder
                 .baseUrl("https://" + q.getAirline())
@@ -90,7 +91,7 @@ public class pubSubController {
                                 "seats", q.getSeatId().toString(),
                                 "ticket")
                         .queryParam("customer", customer)
-                        .queryParam("bookingReference", "")
+                        .queryParam("bookingReference", bookingReference)
                         .queryParam("key", API_KEY)
                         .build())
                 .retrieve()
@@ -124,21 +125,20 @@ public class pubSubController {
                 .block();
     }
 
-    private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer) throws ExecutionException, InterruptedException {
+    private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer, String bookingReference) throws ExecutionException, InterruptedException {
         String currentBookingTime = LocalDateTime.now().toString();
         System.out.println("addBookingToDatabase");
         System.out.println(ticketsFromQuotes.size());
-        String bookingId = UUID.randomUUID().toString();
         String ticketsAsJSON = gson.toJson(ticketsFromQuotes);
 
         // BookingData is structured like booking => contains id, time, tickets and customers.
         Map<String, Object> bookingData = new HashMap<>();
-        bookingData.put("id", bookingId);
+        bookingData.put("id", bookingReference);
         bookingData.put("time", currentBookingTime);
         bookingData.put("tickets", ticketsAsJSON);
         bookingData.put("customer", customer);
 
-        ApiFuture<WriteResult> future = db.collection("bookings").document(bookingId).set(bookingData);
+        ApiFuture<WriteResult> future = db.collection("bookings").document(bookingReference).set(bookingData);
         future.get();
     }
 
