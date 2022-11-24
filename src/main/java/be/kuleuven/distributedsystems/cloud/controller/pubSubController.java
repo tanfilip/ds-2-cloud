@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import javax.annotation.Resource;
 import java.lang.reflect.Type;
@@ -71,16 +72,12 @@ public class pubSubController {
      */
     private List<Ticket> getTickets(List<Quote> quotesToConfirm, String customer, String bookingReference) {
         List<Ticket> ticketsFromQuotes = new ArrayList<>();
-        System.out.println("got to getTickets");
-        System.out.println("size quotes: " + quotesToConfirm.size());
         try {
             for (Quote q: quotesToConfirm) {
                 Ticket ticket = putTicket(q, customer, bookingReference);
                 ticketsFromQuotes.add(ticket);
-                System.out.println("ticket added");
             }
         } catch (Exception e) {
-            System.out.println("putTicket failed");
             deleteBookedTicket(ticketsFromQuotes);
         }
 
@@ -94,6 +91,7 @@ public class pubSubController {
      * @param bookingReference reference to booking ID
      * @return the ticket for the taken seat.
      */
+
     private Ticket putTicket(Quote quote, String customer, String bookingReference) {
         System.out.println("got to putTicket");
         return this.webClientBuilder
@@ -113,7 +111,7 @@ public class pubSubController {
                         response -> Mono.error(new seatAlreadyBookedException(quote)))
                 .bodyToMono(new ParameterizedTypeReference<Ticket>() {
                 })
-                .retry(3)
+                .retryWhen(Retry.max(3))
 //                .retryWhen(Retry.max(3))
                 .block();
     }
@@ -128,8 +126,6 @@ public class pubSubController {
      */
     private void addBookingToDatabase(List<Ticket> ticketsFromQuotes, String customer, String bookingId) throws ExecutionException, InterruptedException {
         String currentBookingTime = LocalDateTime.now().toString();
-        System.out.println("addBookingToDatabase");
-        System.out.println(ticketsFromQuotes.size());
         String ticketsAsJSON = gson.toJson(ticketsFromQuotes);
 
         // BookingData is structured like booking => contains id, time, tickets and customers.
@@ -149,7 +145,6 @@ public class pubSubController {
      */
     private void deleteBookedTicket(List<Ticket> bookedTickets) {
         // delete-ticket;
-        System.out.println("size of booked tickets: " + bookedTickets.size());
         for (Ticket t: bookedTickets) {
             this.webClientBuilder
                     .baseUrl("https://" + t.getAirline())
@@ -163,10 +158,8 @@ public class pubSubController {
                             .build())
                     .retrieve()
                     .bodyToMono(void.class)
-                    .retry(3)
+                    .retryWhen(Retry.max(3))
                     .block();
-            System.out.println("succesfully deleted 1");
         }
-        System.out.println("successfully deleted all booked tickets.");
     }
 }
