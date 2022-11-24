@@ -38,7 +38,7 @@ public class Application {
     private static final String TOPIC = "confirmQuotes";
     private static final String PROJECT_ID = "demo-distributed-systems-kul";
     static String hostPortFireStore = "localhost:8084";
-//    private static boolean subCreated = true;
+    //    private static boolean subCreated = true;
     private static final ManagedChannel pubSubChannel = ManagedChannelBuilder.forTarget(hostPortPubSub).usePlaintext().build();
 
     @SuppressWarnings("unchecked")

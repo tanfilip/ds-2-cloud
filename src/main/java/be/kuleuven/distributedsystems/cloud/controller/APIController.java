@@ -105,7 +105,7 @@ public class APIController {
     }
     @GetMapping(value = "/getFlight")
     public Flight getFlightById(@RequestParam("airline") String airline,
-                                                @RequestParam("flightId") String flightId) {
+                                @RequestParam("flightId") String flightId) {
         return this.webClientBuilder
                 .baseUrl("https://" + airline)
                 .build()
@@ -315,7 +315,7 @@ public class APIController {
      * @return list of all the bookings stored in the Firestore Database.
      * @throws ExecutionException if db.collection("bookings").get.get throws an exception during the getter.
      * @throws InterruptedException if db.collection("bookings").get().get() was interrupted while searching
-      */
+     */
     private List<Booking> getAllBookingsFromDb() throws ExecutionException, InterruptedException {
         List<Booking> allRetrievedBookings = new ArrayList<>();
         System.out.println("begin of getAllBookingsFromDb");
@@ -326,15 +326,6 @@ public class APIController {
 
         // Queries:
         System.out.println("allDocuments size: " + allDocuments.size());
-//        for (QueryDocumentSnapshot currentBooking : allDocuments) {
-//            String bookingId = currentBooking.getData().get("id").toString();
-//            List<Ticket> bookingTickets = getTicketsFromBookingInDb(bookingId);
-//
-//            LocalDateTime bookingTime = LocalDateTime.parse(currentBooking.getData().get("time").toString());
-//            String bookingCustomer = currentBooking.getData().get("customer").toString();
-//            Booking retrievedBooking = new Booking(UUID.fromString(bookingId), bookingTime, bookingTickets, bookingCustomer);
-//            allRetrievedBookings.add(retrievedBooking);
-//        }
         for (QueryDocumentSnapshot currentBooking : allDocuments) {
             String bookingId = currentBooking.getData().get("id").toString();
             String ticketString = currentBooking.getData().get("tickets").toString();
